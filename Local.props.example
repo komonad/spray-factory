@@ -1,0 +1,6 @@
+<Project><PropertyGroup>
+  <Managed>C:/Games/Dyson Sphere Program/DSPGAME_Data/Managed</Managed>
+  <GameAssembly>C:/DSPModding/Assembly-CSharp-publicized.dll</GameAssembly>
+  <BepInExCore>C:/DSPModding/BepInEx/core</BepInExCore>
+  <ModPlugins>C:/DSPModding/BepInEx/plugins</ModPlugins>
+</PropertyGroup></Project>

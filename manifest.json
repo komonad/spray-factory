@@ -1,0 +1,7 @@
+{
+  "name": "SprayFactory",
+  "version_number": "0.1.0",
+  "website_url": "https://github.com/komonad/spray-factory",
+  "description": "A compact 300 kW recipe factory: feed mixed ingredients on the upper belt and collect stacked products on the lower belt. By Comonad.",
+  "dependencies": ["xiaoye97-BepInEx-5.4.17", "CommonAPI-CommonAPI-1.6.7", "xiaoye97-LDBTool-3.0.3", "CommonAPI-DSPModSave-1.2.2"]
+}
