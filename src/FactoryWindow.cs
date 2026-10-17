@@ -44,14 +44,8 @@ namespace SprayFactory
             Bind(view.productButton0.button,()=>TakeOutput(0));
             Bind(view.productButton1.button,()=>TakeOutput(1));
             Bind(view.incSwitchButton,()=>WithState(state=>state.ForceAccMode=!state.ForceAccMode));
-            Bind(view.copyButton.button,FillInputs); SetText(view.copyButton.GetComponentInChildren<Text>(true),"补料");
-            Bind(view.pasteButton.button,ReturnAll); SetText(view.pasteButton.GetComponentInChildren<Text>(true),"取回");
-            var copyRect=(RectTransform)view.copyButton.transform;
-            var returnRect=(RectTransform)view.pasteButton.transform;
-            returnRect.SetParent(copyRect.parent,false);
-            returnRect.anchorMin=copyRect.anchorMin; returnRect.anchorMax=copyRect.anchorMax; returnRect.pivot=copyRect.pivot;
-            returnRect.sizeDelta=copyRect.sizeDelta;
-            returnRect.anchoredPosition=copyRect.anchoredPosition-Vector2.right*(copyRect.rect.width+6);
+            view.copyButton.gameObject.SetActive(false);
+            view.pasteButton.gameObject.SetActive(false);
             Bind(view.transform.Find("panel-bg/btn-box/close-wnd-btn").GetComponent<Button>(),()=>UIRoot.instance.uiGame.ShutSpraycoaterWindow());
             view.menuButton.gameObject.SetActive(false);
             view.alarmSwitchButton.gameObject.SetActive(false); view.alarmSwitchText.gameObject.SetActive(false);
@@ -119,25 +113,6 @@ namespace SprayFactory
                 WithState(state=>state.ChangeRecipe(recipe.ID));
             });
         }
-        private static void FillInputs()
-        {
-            WithState(state=>{
-                var recipe=LDB.recipes.Select(state.RecipeId); var player=GameMain.mainPlayer;
-                if(recipe==null || player==null || !GameMain.history.RecipeUnlocked(recipe.ID)) return;
-                foreach(int item in recipe.Items)
-                {
-                    int id=item,count=state.Acceptable(recipe,item);
-                    player.package.TakeTailItems(ref id,ref count,out int inc);
-                    if(count>0) FactoryState.Buffer(state.Input,item).Add(count,inc);
-                }
-            });
-        }
-        private static void ReturnAll()
-        {
-            WithState(state=>{
-                if(GameMain.mainPlayer!=null) FactoryRuntime.ReturnItems(GameMain.mainPlayer,owner.traffic.spraycoaterPool[owner.spraycoaterId].entityId,state);
-            });
-        }
         private static void TakeOutput(int index)
         {
             WithState(state=>{
@@ -189,8 +164,6 @@ namespace SprayFactory
                 RefreshPower();
                 view.stateText.text=state.Status; view.stateText.color=state.Status=="生产中"?view.workNormalColor:view.workStoppedColor;
                 view.resetButton.button.interactable=hasRecipe;
-                view.copyButton.gameObject.SetActive(hasRecipe);
-                view.pasteButton.gameObject.SetActive(hasRecipe || state.Input.Values.Any(b=>b.Count>0) || state.Output.Values.Any(b=>b.Count>0) || state.Pending.Values.Any(b=>b.Count>0));
                 view.incSwitchButton.interactable=hasRecipe && recipe.productive;
                 view.incSwitchButtonImage.color=accelerate?view.incButtonColor2:view.incButtonColor1;
                 view.incSwitchButtonThumb.rectTransform.anchoredPosition=new Vector2(accelerate?10:-10,0);

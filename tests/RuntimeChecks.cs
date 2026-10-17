@@ -770,6 +770,25 @@ public sealed class RuntimeChecks : BaseUnityPlugin
                 Check(view.productIcon0.sprite==LDB.items.Select(1202).iconSprite && view.productCountText0.text=="3","native output slot shows product and buffer count");
                 var serving=(StorageComponent)AccessTools.Field(type,"serving").GetValue(null);
                 Check(serving.grids[0].itemId==1102 && serving.grids[0].count==2 && serving.grids[0].inc==8,"native ingredient grid reflects item counts and spray points");
+                Check(!view.copyButton.gameObject.activeSelf && !view.pasteButton.gameObject.activeSelf,"factory window hides bulk refill and retrieval buttons");
+                var gridClick=AccessTools.Method(typeof(UIStorageGrid),"OnGridMouseDown");
+                state.Input[1102].Count=0;state.Input[1102].Inc=0;
+                package.grids[1].inc=48;
+                gridClick.Invoke(view.playerInventory,new object[]{1,0,false,true,player});
+                int inputCapacity=FactoryState.InputLimit(LDB.recipes.Select(6).ItemCounts[0]);
+                Check(state.Input[1102].Count==serving.grids[0].stackSize && state.Input[1102].Count==inputCapacity
+                    && state.Input[1102].Inc==4*inputCapacity && package.grids[1].count==12-inputCapacity && package.grids[1].inc==48-4*inputCapacity
+                    && player.inhandItemCount==0,"native Ctrl-click fills live ingredient capacity and preserves excess items and proliferation");
+                gridClick.Invoke(view.playerInventory,new object[]{1,0,false,true,player});
+                Check(state.Input[1102].Count==inputCapacity && package.grids[1].count+player.inhandItemCount==12-inputCapacity
+                    && package.grids[1].inc+player.inhandItemInc==48-4*inputCapacity,"full ingredient cache preserves items through native hand pickup fallback");
+                package.AddItemStacked(player.inhandItemId,player.inhandItemCount,player.inhandItemInc,out int unusedInc);
+                player.SetHandItems(0,0);
+                gridClick.Invoke(view.playerInventory,new object[]{0,0,false,true,player});
+                Check(package.grids[0].count+player.inhandItemCount==20 && state.Input[1102].Count==inputCapacity
+                    && !state.Input.ContainsKey(1101),"Ctrl-click keeps unrelated items out of the ingredient cache");
+                package.AddItemStacked(player.inhandItemId,player.inhandItemCount,player.inhandItemInc,out unusedInc);
+                player.SetHandItems(0,0);
                 Check(view.incSwitchButton.interactable && view.incSwitchButtonThumb.rectTransform.anchoredPosition.x==-10,"productive recipe enables the native mode switch");
                 state.ExtraProgress=0.25;state.BatchBonus=0.25;state.BatchAccMode=false;
                 AccessTools.Method(type,"Refresh").Invoke(null,new object[]{window});
@@ -799,6 +818,22 @@ public sealed class RuntimeChecks : BaseUnityPlugin
                 state.ChangeRecipe(Prototypes.RecipeId); state.ForceAccMode=false;
                 AccessTools.Method(type,"Refresh").Invoke(null,new object[]{window});
                 Check(!view.incSwitchButton.interactable && view.incSwitchButtonThumb.rectTransform.anchoredPosition.x==10 && !state.ForceAccMode,"nonproductive recipe locks acceleration without changing preference");
+                int ironBefore=package.grids[0].count;
+                gridClick.Invoke(view.playerInventory,new object[]{0,0,false,true,player});
+                Check(state.Input[1101].Count==8 && package.grids[0].count==ironBefore-8,"Ctrl-click follows the new recipe ingredient filters and capacities");
+                var closedInventory=view.playerInventory;var closedServing=view.servingBox;
+                AccessTools.Method(type,"Hide").Invoke(null,null);
+                var opened=(List<UIStorageGrid>)AccessTools.Field(typeof(UIStorageGrid),"openedStorages").GetValue(null);
+                Check(!opened.Contains(closedInventory) && !opened.Contains(closedServing),"closing factory removes both grids from native transfer targets");
+                state.ChangeRecipe(6);
+                state.Input[1102].Count=0;state.Input[1102].Inc=0;
+                AccessTools.Method(type,"Refresh").Invoke(null,new object[]{window});
+                view=(UIAssemblerWindow)AccessTools.Field(type,"view").GetValue(null);
+                int oreBefore=package.grids[1].count;
+                gridClick.Invoke(view.playerInventory,new object[]{1,0,false,true,player});
+                Check(state.Input[1102].Count==inputCapacity && package.grids[1].count==oreBefore-inputCapacity
+                    && opened.Count(g=>g==view.servingBox)==1 && opened.Count(g=>g==view.playerInventory)==1,
+                    "reopened factory transfers into its current ingredient cache once");
             } finally {
                 AccessTools.Method(type,"Hide").Invoke(null,null);
                 Check(((RectTransform)window.transform).sizeDelta==originalWindowSize,"vanilla window size restores after factory closes");
