@@ -13,7 +13,11 @@ namespace SprayFactory
         private static UISpraycoaterWindow owner;
         private static UIAssemblerWindow view;
         private static readonly Dictionary<GameObject,bool> hidden=new Dictionary<GameObject,bool>();
-        private static Vector2 originalSize;
+        private static Vector2 originalSize,originalPosition,screenSize;
+        private static Vector2? savedTopLeft;
+        private static bool initialLayout;
+        private static UIWindowDrag windowDrag;
+        private static readonly Vector3[] windowCorners=new Vector3[4];
         private static StorageComponent serving;
         private static int servingRecipe;
         private static Vector2 originalIncPosition,originalTipPosition,originalSpeedPosition,originalServingPosition;
@@ -37,6 +41,8 @@ namespace SprayFactory
             if(owner==window && view!=null) return;
             Hide(); owner=window;
             originalSize=((RectTransform)owner.transform).sizeDelta;
+            originalPosition=((RectTransform)owner.transform).anchoredPosition;
+            initialLayout=true;
             foreach(Transform child in owner.transform)
             { hidden[child.gameObject]=child.gameObject.activeSelf; child.gameObject.SetActive(false); }
             view=UnityEngine.Object.Instantiate(UIRoot.instance.uiGame.assemblerWindow,owner.transform,false);
@@ -67,7 +73,33 @@ namespace SprayFactory
             view.servingBox.beforeManualChange+=SyncInputs;
             var drag=view.GetComponent<UIWindowDrag>();
             drag.dragTrans=(RectTransform)owner.transform; drag.refTrans=drag.dragTrans;
+            windowDrag=drag;
             view.gameObject.SetActive(true);
+        }
+        private static Vector3 TopLeft(RectTransform rect)
+        {
+            return rect.TransformPoint(new Vector3(rect.rect.xMin,rect.rect.yMax,0));
+        }
+        private static void ResizeWindow(Vector2 size)
+        {
+            var rect=(RectTransform)owner.transform;
+            var screen=windowDrag.screenRect;
+            if(!initialLayout && rect.sizeDelta==size && screenSize==screen.rect.size) return;
+            var topLeft=TopLeft(rect);
+            view.windowTrans.sizeDelta=size;rect.sizeDelta=size;
+            if(initialLayout && !savedTopLeft.HasValue)
+                rect.position+=screen.TransformPoint(screen.rect.center)-rect.TransformPoint(rect.rect.center);
+            else
+                rect.position+=(initialLayout?screen.TransformPoint(savedTopLeft.Value):topLeft)-TopLeft(rect);
+            initialLayout=false;screenSize=screen.rect.size;
+
+            // Keep the title fixed during expansion, then fit the completed layout to the UI canvas.
+            rect.GetWorldCorners(windowCorners);
+            var min=screen.InverseTransformPoint(windowCorners[0]);var max=screen.InverseTransformPoint(windowCorners[2]);
+            float left=screen.rect.xMin+12,right=screen.rect.xMax-12,bottom=screen.rect.yMin+12,top=screen.rect.yMax-12;
+            float x=max.x-min.x>right-left?left-min.x:min.x<left?left-min.x:Mathf.Min(0,right-max.x);
+            float y=max.y-min.y>top-bottom?top-max.y:max.y>top?top-max.y:Mathf.Max(0,bottom-min.y);
+            rect.position+=screen.TransformVector(new Vector3(x,y,0));
         }
         private static void SetText(Text label,string text)
         {
@@ -215,16 +247,16 @@ namespace SprayFactory
                 view.incEffectTypeText.text=accelerate?"加速生产":"额外产出";
                 view.incEffectTypeText.color=accelerate?view.incTextColor2:view.incTextColor1;
                 view.incEffectValueText2.text="+0.0 %";
-                SetText(view.transferTipText,"原料缓存：2 轮    满 "+FactoryRuntime.OutputStackLimit()+" 层输出");
+                SetText(view.transferTipText,"自动进料：2 轮    满 "+FactoryRuntime.OutputStackLimit()+" 层输出");
                 if(servingRecipe!=state.RecipeId)
                 {
                     FreeServing();
                     if(hasRecipe && recipe.Items.Length>0)
                     {
                         serving=new StorageComponent(recipe.Items.Length) {type=EStorageType.Filtered}; servingRecipe=state.RecipeId;
-                        for(int i=0;i<recipe.Items.Length;i++) serving.SetFilterDirect(i,recipe.Items[i],FactoryState.InputLimit(recipe.ItemCounts[i]));
+                        for(int i=0;i<recipe.Items.Length;i++) serving.SetFilterDirect(i,recipe.Items[i],FactoryState.ManualInputLimit(recipe.ItemCounts[i],recipe.Type));
                         serving.onStorageChange+=ApplyInputs;
-                        view.servingBox.colCount=Math.Min(3,recipe.Items.Length); view.servingBox.lackParam=2;
+                        view.servingBox.colCount=Math.Min(3,recipe.Items.Length); view.servingBox.lackParam=FactoryState.ManualInputRounds(recipe.Type);
                         view.servingBox._Init(serving); view.servingBox._Open();
                     }
                 }
@@ -275,7 +307,7 @@ namespace SprayFactory
                 view.playerInventoryGroup.anchoredPosition=new Vector2(0,-220-extraHeight);
                 float widthWindow=player!=null?80+player.GetPackageColumnCount()*50:((RectTransform)UIRoot.instance.uiGame.assemblerWindow.transform).sizeDelta.x;
                 var size=new Vector2(widthWindow,(view.playerInventory.active?view.playerInventory.rowCount*50+220:270)+(hasRecipe?40:0)+extraHeight);
-                view.windowTrans.sizeDelta=size; ((RectTransform)owner.transform).sizeDelta=size;
+                ResizeWindow(size);
             });
             if(GameMain.mainPlayer!=null)
             {
@@ -288,11 +320,16 @@ namespace SprayFactory
             FactoryRecipePicker.Close();
             if(view!=null)
             {
+                savedTopLeft=windowDrag.screenRect.InverseTransformPoint(TopLeft((RectTransform)owner.transform));
                 FreeServing(); view.servingBox._Destroy(); view.playerInventory._Destroy();
                 view.gameObject.SetActive(false); UnityEngine.Object.Destroy(view.gameObject); view=null;
+                windowDrag=null;
                 extraProducts.Clear();
             }
-            if(owner!=null) ((RectTransform)owner.transform).sizeDelta=originalSize;
+            if(owner!=null)
+            {
+                var rect=(RectTransform)owner.transform;rect.sizeDelta=originalSize;rect.anchoredPosition=originalPosition;
+            }
             foreach(var entry in hidden) if(entry.Key!=null) entry.Key.SetActive(entry.Value);
             hidden.Clear(); owner=null;
         }

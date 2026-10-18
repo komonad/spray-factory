@@ -15,6 +15,7 @@
 
 - 随一级传送带解锁。制造需要 `4 铁块 + 2 齿轮 + 2 电路板`，基础制造时间 3 秒。
 - 打开工厂窗口，点击齿轮选择配方，再从上层入口送入混带原料。
+- 传送带自动进料只补到 2 轮配方用量。手动放入和 Ctrl 点击补料可缓存更多原料：一般配方 20 轮，熔炼配方 50 轮。
 - 下层传送带可以完整贯穿建筑，不接收原料；请为混合产物预留输出空间。
 - 工作功耗 300 kW，待机功耗约 10 kW。
 - 建造菜单自动寻找空位；安装 BuildBarTool 时优先使用上排空位。
@@ -50,6 +51,7 @@ Turn the spray coater into a universal factory. Build production lines without s
 
 - Unlocked alongside Conveyor Belt Mk.I. Craft one factory from `4 Iron Ingots + 2 Gears + 2 Circuit Boards` in 3 seconds.
 - Open the factory window, click the gear to choose a recipe, and supply mixed ingredients through the upper input.
+- Belt input fills only 2 recipe batches. Manual insertion and Ctrl-click transfers can fill a larger buffer: 20 batches for most recipes, or 50 for smelting.
 - The lower belt runs continuously through the building and does not accept ingredients. Leave room for mixed products on the output belt.
 - Working power: 300 kW. Idle power: approximately 10 kW.
 - Automatically selects a free build-menu slot, preferring the upper row when BuildBarTool is installed.

@@ -43,6 +43,8 @@ namespace SprayFactory
             return result;
         }
         public static int InputLimit(int recipeCount) { return checked(recipeCount * 2); }
+        public static int ManualInputRounds(ERecipeType type) { return type == ERecipeType.Smelt ? 50 : 20; }
+        public static int ManualInputLimit(int recipeCount, ERecipeType type) { return checked(recipeCount * ManualInputRounds(type)); }
         public static int OutputLimit(int recipeCount, int batches = 1)
         {
             // A complete batch must fit while the buffer holds less than one output stack.

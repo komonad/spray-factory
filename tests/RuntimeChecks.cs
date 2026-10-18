@@ -499,6 +499,14 @@ public sealed class RuntimeChecks : BaseUnityPlugin
                 Check(remainder>=0 && container.cargoPool[remainder].stack==2 && container.cargoPool[remainder].inc==8,"partial stack pickup preserves remaining count and points");
                 FactoryRuntime.Receive(traffic,1,state,recipe);
                 Check(state.Input[1104].Count==2 && container.cargoPool[remainder].stack==2,"full input buffer stops collection");
+                state.Input[1104].Add(6,24);
+                FactoryRuntime.Receive(traffic,1,state,recipe);
+                Check(state.Input[1104].Count==8 && state.Input[1104].Inc==32 && container.cargoPool[remainder].stack==2
+                    && container.cargoPool[remainder].inc==8,"manual stock above two batches stops belt pickup without removing stock or cargo");
+                state.Input[1104].Take(7);
+                FactoryRuntime.Receive(traffic,1,state,recipe);
+                Check(state.Input[1104].Count==2 && state.Input[1104].Inc==8 && container.cargoPool[remainder].stack==1
+                    && container.cargoPool[remainder].inc==4,"belt pickup resumes below two batches and fills only the automatic target");
                 path.TryPickItem(40,10,out _,out _);
                 var old=GameMain.data; var history=new GameHistoryData(); GameMain.data=new GameData {history=history};
                 try {
@@ -679,6 +687,7 @@ public sealed class RuntimeChecks : BaseUnityPlugin
             AccessTools.PropertySetter(typeof(GameData),"mainPlayer").Invoke(GameMain.data,new object[]{player});
             var window=UIRoot.instance.uiGame.spraycoaterWindow;
             var originalWindowSize=((RectTransform)window.transform).sizeDelta;
+            var originalWindowPosition=((RectTransform)window.transform).anchoredPosition;
             var factory=new PlanetFactory {entityPool=new EntityData[2]};
             AccessTools.PropertySetter(typeof(PlanetFactory),"planet").Invoke(factory,new object[]{new PlanetData {id=101}});
             factory.entityPool[1]=new EntityData {id=1,protoId=(short)Prototypes.ItemId,spraycoaterId=1};
@@ -700,6 +709,9 @@ public sealed class RuntimeChecks : BaseUnityPlugin
                     && view.speedText.fontSize==native.speedText.fontSize && view.titleText.fontSize==native.titleText.fontSize,"factory typography matches native assembler window");
                 var drag=view.GetComponent<UIWindowDrag>();
                 Check(drag.dragTrans==window.transform && drag.dragTrigger.gameObject.activeSelf,"native drag handle moves the factory window");
+                var factoryRect=(RectTransform)window.transform;
+                Check(Vector3.Distance(factoryRect.TransformPoint(factoryRect.rect.center),drag.screenRect.TransformPoint(drag.screenRect.rect.center))<0.1f,
+                    "first factory window opens at the center of the UI canvas");
                 Check(view.powerText.text=="未供电".Translate(),"factory window reports a disconnected power supply");
                 factory.planet.factory=factory;factory.powerSystem=new PowerSystem(factory.planet);
                 factory.powerSystem.consumerPool[1]=new PowerConsumerComponent {id=1,entityId=1,networkId=1,requiredEnergy=5000,workEnergyPerTick=5000,idleEnergyPerTick=167};
@@ -762,26 +774,48 @@ public sealed class RuntimeChecks : BaseUnityPlugin
                     picker.transform.SetParent(pickerParent,true);picker.transform.SetSiblingIndex(pickerSibling);
                 }
                 var state=FactoryStore.Get(101,1); state.ChangeRecipe(6);
+                var expansionTopLeft=drag.screenRect.TransformPoint(new Vector3(drag.screenRect.rect.xMin+40,drag.screenRect.rect.yMax-40,0));
+                factoryRect.position+=expansionTopLeft-factoryRect.TransformPoint(new Vector3(factoryRect.rect.xMin,factoryRect.rect.yMax,0));
                 FactoryState.Buffer(state.Input,1102).Add(2,8); FactoryState.Buffer(state.Output,1202).Add(3,0);
                 state.Progress=30; state.Duration=60; state.Status="生产中";
                 AccessTools.Method(type,"Refresh").Invoke(null,new object[]{window});
                 Check(!view.recipeGroup.gameObject.activeSelf && view.produceGroup.gameObject.activeSelf && view.servingBox.active,"recipe activates native production and ingredient controls");
                 Check(view.playerInventory.active && view.playerInventoryGroup.gameObject.activeSelf && view.windowTrans.sizeDelta==new Vector2(580,460),"native backpack grid controls window proportions");
+                Check(Vector3.Distance(expansionTopLeft,factoryRect.TransformPoint(new Vector3(factoryRect.rect.xMin,factoryRect.rect.yMax,0)))<0.1f
+                    && WindowFits(factoryRect,drag.screenRect),"opening the backpack preserves the title position near the top screen edge");
                 Check(view.productIcon0.sprite==LDB.items.Select(1202).iconSprite && view.productCountText0.text=="3","native output slot shows product and buffer count");
                 var serving=(StorageComponent)AccessTools.Field(type,"serving").GetValue(null);
                 Check(serving.grids[0].itemId==1102 && serving.grids[0].count==2 && serving.grids[0].inc==8,"native ingredient grid reflects item counts and spray points");
                 Check(!view.copyButton.gameObject.activeSelf && !view.pasteButton.gameObject.activeSelf,"factory window hides bulk refill and retrieval buttons");
                 var gridClick=AccessTools.Method(typeof(UIStorageGrid),"OnGridMouseDown");
-                state.Input[1102].Count=0;state.Input[1102].Inc=0;
                 package.grids[1].inc=48;
+                player.SetHandItems(1102,6,1);
+                gridClick.Invoke(view.servingBox,new object[]{0,0,false,false,player});
+                Check(state.Input[1102].Count==8 && state.Input[1102].Inc==32 && player.inhandItemCount==0,
+                    "manual hand insertion exceeds the automatic two-batch target and preserves proliferation");
+                int returnedOre=package.GetItemCount(1102);
+                gridClick.Invoke(view.servingBox,new object[]{0,0,false,true,player});
+                Check(state.Input[1102].Count==0 && state.Input[1102].Inc==0 && package.GetItemCount(1102)==returnedOre+8,
+                    "manual ingredient retrieval returns the full enlarged cache to the backpack");
+                state.Input[1102].Count=0;state.Input[1102].Inc=0;
+                int inputCapacity=FactoryState.ManualInputLimit(LDB.recipes.Select(6).ItemCounts[0],LDB.recipes.Select(6).Type);
+                int availableOre=inputCapacity+7;
+                package.grids[1]=new StorageComponent.GRID {itemId=1102,count=availableOre,inc=availableOre*4,stackSize=100};
                 gridClick.Invoke(view.playerInventory,new object[]{1,0,false,true,player});
-                int inputCapacity=FactoryState.InputLimit(LDB.recipes.Select(6).ItemCounts[0]);
                 Check(state.Input[1102].Count==serving.grids[0].stackSize && state.Input[1102].Count==inputCapacity
-                    && state.Input[1102].Inc==4*inputCapacity && package.grids[1].count==12-inputCapacity && package.grids[1].inc==48-4*inputCapacity
+                    && state.Input[1102].Count>FactoryState.InputLimit(LDB.recipes.Select(6).ItemCounts[0])
+                    && state.Input[1102].Inc==4*inputCapacity && package.grids[1].count==availableOre-inputCapacity && package.grids[1].inc==4*(availableOre-inputCapacity)
                     && player.inhandItemCount==0,"native Ctrl-click fills live ingredient capacity and preserves excess items and proliferation");
+                Check(inputCapacity==40 && view.servingBox.lackParam==20,"assembling uses the native twenty-batch manual capacity");
+                using(var memory=new MemoryStream()) {
+                    state.Write(new BinaryWriter(memory));memory.Position=0;
+                    var restored=FactoryState.Read(new BinaryReader(memory));
+                    Check(restored.Input[1102].Count==inputCapacity && restored.Input[1102].Inc==inputCapacity*4,
+                        "manual stock above the automatic target survives a save roundtrip");
+                }
                 gridClick.Invoke(view.playerInventory,new object[]{1,0,false,true,player});
-                Check(state.Input[1102].Count==inputCapacity && package.grids[1].count+player.inhandItemCount==12-inputCapacity
-                    && package.grids[1].inc+player.inhandItemInc==48-4*inputCapacity,"full ingredient cache preserves items through native hand pickup fallback");
+                Check(state.Input[1102].Count==inputCapacity && package.grids[1].count+player.inhandItemCount==availableOre-inputCapacity
+                    && package.grids[1].inc+player.inhandItemInc==4*(availableOre-inputCapacity),"full ingredient cache preserves items through native hand pickup fallback");
                 package.AddItemStacked(player.inhandItemId,player.inhandItemCount,player.inhandItemInc,out int unusedInc);
                 player.SetHandItems(0,0);
                 gridClick.Invoke(view.playerInventory,new object[]{0,0,false,true,player});
@@ -815,23 +849,36 @@ public sealed class RuntimeChecks : BaseUnityPlugin
                 Check(view.productGroup.sizeDelta==new Vector2(128,64) && view.speedGroup.anchoredPosition.x==144 && view.servingGroup.anchoredPosition.x==224,
                     "dual-product recipes retain native output, speed and ingredient spacing");
                 Check(view.productIcon1.sprite==LDB.items.Select(dual.Results[1]).iconSprite && view.productIcon1.gameObject.activeSelf,"second native product slot shows the secondary result");
+                var smelting=LDB.recipes.dataArray.First(recipe=>recipe.Type==ERecipeType.Smelt && recipe.Items.Length>0);
+                state.ChangeRecipe(smelting.ID);
+                AccessTools.Method(type,"Refresh").Invoke(null,new object[]{window});
+                var smeltingStorage=(StorageComponent)AccessTools.Field(type,"serving").GetValue(null);
+                Check(view.servingBox.lackParam==50 && Enumerable.Range(0,smelting.Items.Length).All(i=>smeltingStorage.grids[i].stackSize==smelting.ItemCounts[i]*50),
+                    "smelting uses the native fifty-batch manual capacity");
                 state.ChangeRecipe(Prototypes.RecipeId); state.ForceAccMode=false;
                 AccessTools.Method(type,"Refresh").Invoke(null,new object[]{window});
                 Check(!view.incSwitchButton.interactable && view.incSwitchButtonThumb.rectTransform.anchoredPosition.x==10 && !state.ForceAccMode,"nonproductive recipe locks acceleration without changing preference");
                 int ironBefore=package.grids[0].count;
                 gridClick.Invoke(view.playerInventory,new object[]{0,0,false,true,player});
-                Check(state.Input[1101].Count==8 && package.grids[0].count==ironBefore-8,"Ctrl-click follows the new recipe ingredient filters and capacities");
+                int acceptedIron=Math.Min(ironBefore,FactoryState.ManualInputLimit(4,ERecipeType.Assemble));
+                Check(state.Input[1101].Count==acceptedIron && package.grids[0].count==ironBefore-acceptedIron,"Ctrl-click follows the new recipe ingredient filters and capacities");
                 var closedInventory=view.playerInventory;var closedServing=view.servingBox;
+                var savedFactoryTopLeft=factoryRect.TransformPoint(new Vector3(factoryRect.rect.xMin,factoryRect.rect.yMax,0));
                 AccessTools.Method(type,"Hide").Invoke(null,null);
+                Check(factoryRect.anchoredPosition==originalWindowPosition,"closing the factory restores the native spray coater window position");
                 var opened=(List<UIStorageGrid>)AccessTools.Field(typeof(UIStorageGrid),"openedStorages").GetValue(null);
                 Check(!opened.Contains(closedInventory) && !opened.Contains(closedServing),"closing factory removes both grids from native transfer targets");
                 state.ChangeRecipe(6);
                 state.Input[1102].Count=0;state.Input[1102].Inc=0;
                 AccessTools.Method(type,"Refresh").Invoke(null,new object[]{window});
                 view=(UIAssemblerWindow)AccessTools.Field(type,"view").GetValue(null);
+                drag=view.GetComponent<UIWindowDrag>();
+                Check(Vector3.Distance(savedFactoryTopLeft,factoryRect.TransformPoint(new Vector3(factoryRect.rect.xMin,factoryRect.rect.yMax,0)))<0.1f,
+                    "reopening the factory retains its title position independently of the native coater");
                 int oreBefore=package.grids[1].count;
                 gridClick.Invoke(view.playerInventory,new object[]{1,0,false,true,player});
-                Check(state.Input[1102].Count==inputCapacity && package.grids[1].count==oreBefore-inputCapacity
+                int acceptedOre=Math.Min(oreBefore,inputCapacity);
+                Check(state.Input[1102].Count==acceptedOre && package.grids[1].count==oreBefore-acceptedOre
                     && opened.Count(g=>g==view.servingBox)==1 && opened.Count(g=>g==view.playerInventory)==1,
                     "reopened factory transfers into its current ingredient cache once");
                 var originalRecipes=LDB.recipes.dataArray;
@@ -851,8 +898,21 @@ public sealed class RuntimeChecks : BaseUnityPlugin
                     var slots=(System.Collections.IList)AccessTools.Field(type,"extraProducts").GetValue(null);
                     Check(view.servingBox.colCount==3 && view.servingBox.rowCount==2 && slots.Count==4
                         && view.windowTrans.sizeDelta==new Vector2(580,524),"six ingredients and six products fit two native rows above the backpack");
+                    Check(Vector3.Distance(savedFactoryTopLeft,factoryRect.TransformPoint(new Vector3(factoryRect.rect.xMin,factoryRect.rect.yMax,0)))<0.1f
+                        && WindowFits(factoryRect,drag.screenRect),"adding the second recipe row preserves the title and stays on screen");
+                    var actualScreen=drag.screenRect;
+                    var smallScreen=new GameObject("factory-window-screen-check",typeof(RectTransform)).GetComponent<RectTransform>();
+                    smallScreen.SetParent(actualScreen,false);smallScreen.sizeDelta=new Vector2(800,600);
+                    try {
+                        drag.screenRect=smallScreen;
+                        var offscreenTopLeft=smallScreen.TransformPoint(new Vector3(smallScreen.rect.xMax-80,smallScreen.rect.yMax+100,0));
+                        factoryRect.position+=offscreenTopLeft-factoryRect.TransformPoint(new Vector3(factoryRect.rect.xMin,factoryRect.rect.yMax,0));
+                        AccessTools.Method(type,"Refresh").Invoke(null,new object[]{window});
+                        Check(WindowFits(factoryRect,smallScreen),"a changed UI canvas brings the full six-product window back inside its bounds");
+                    } finally {drag.screenRect=actualScreen;UnityEngine.Object.DestroyImmediate(smallScreen.gameObject);}
+                    AccessTools.Method(type,"Refresh").Invoke(null,new object[]{window});
                     for(int i=0;i<6;i++)gridClick.Invoke(view.playerInventory,new object[]{i,0,false,true,player});
-                    Check(six.Items.All(item=>state.Input[item].Count==2 && state.Input[item].Inc==16),"all six native ingredient slots retain Ctrl-click transfer and proliferation");
+                    Check(six.Items.All(item=>state.Input[item].Count==4 && state.Input[item].Inc==32),"all six native ingredient slots accept manual stock above two batches with proliferation");
                     bool collected=true;
                     for(int i=0;i<6;i++) {
                         var button=i==0?view.productButton0:i==1?view.productButton1:(UIButton)AccessTools.Field(slots[i-2].GetType(),"Button").GetValue(slots[i-2]);
@@ -871,6 +931,7 @@ public sealed class RuntimeChecks : BaseUnityPlugin
             } finally {
                 AccessTools.Method(type,"Hide").Invoke(null,null);
                 Check(((RectTransform)window.transform).sizeDelta==originalWindowSize,"vanilla window size restores after factory closes");
+                Check(((RectTransform)window.transform).anchoredPosition==originalWindowPosition,"vanilla window position restores after factory closes");
                 window.factory=previousFactory; window.traffic=previousTraffic;
                 AccessTools.Field(typeof(UISpraycoaterWindow),"_spraycoaterId").SetValue(window,0);
                 GameMain.data=previousData; package.Free();
@@ -881,6 +942,15 @@ public sealed class RuntimeChecks : BaseUnityPlugin
         Application.Quit(failures==0?0:1);
     }
 
+    private static bool WindowFits(RectTransform window,RectTransform screen)
+    {
+        var corners=new Vector3[4];window.GetWorldCorners(corners);
+        return corners.All(corner=>{
+            var point=screen.InverseTransformPoint(corner);
+            return point.x>=screen.rect.xMin-0.1f && point.x<=screen.rect.xMax+0.1f
+                && point.y>=screen.rect.yMin-0.1f && point.y<=screen.rect.yMax+0.1f;
+        });
+    }
     private void CaptureWindow(ManualBehaviour window,string filename="factory-ui.png")
     {
         var canvasObject=new GameObject("factory-ui-preview",typeof(RectTransform),typeof(Canvas),typeof(UnityEngine.UI.CanvasScaler));
