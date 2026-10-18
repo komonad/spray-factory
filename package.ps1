@@ -6,7 +6,7 @@ $staging = Join-Path $root ('obj/package-' + [guid]::NewGuid().ToString('N'))
 $plugin = Join-Path $staging 'BepInEx/plugins/SprayFactory'
 New-Item -ItemType Directory -Path $plugin -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'bin/Release/SprayFactory.dll') -Destination $plugin
-foreach ($file in @('manifest.json','README.md','icon.png')) {
+foreach ($file in @('manifest.json','README.md','CHANGELOG.md','icon.png')) {
     Copy-Item -LiteralPath (Join-Path $root $file) -Destination $staging
 }
 $readmePath = Join-Path $staging 'README.md'

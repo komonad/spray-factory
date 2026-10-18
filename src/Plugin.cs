@@ -11,7 +11,7 @@ using xiaoye97;
 
 namespace SprayFactory
 {
-    [BepInPlugin(Guid, "Spray Factory", "0.1.0")]
+    [BepInPlugin(Guid, "Spray Factory", "0.1.1")]
     [BepInDependency(CommonAPIPlugin.GUID, "1.6.7")]
     [BepInDependency("me.xiaoye97.plugin.Dyson.LDBTool", "3.0.3")]
     [BepInDependency(DSPModSavePlugin.MODGUID, "1.2.2")]

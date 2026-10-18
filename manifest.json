@@ -1,6 +1,6 @@
 {
   "name": "SprayFactory",
-  "version_number": "0.1.0",
+  "version_number": "0.1.1",
   "website_url": "https://github.com/komonad/spray-factory",
   "description": "Turn the spray coater into a universal factory. Build production lines without sorters and take on the challenges of mixed inputs and outputs.",
   "dependencies": ["xiaoye97-BepInEx-5.4.17", "CommonAPI-CommonAPI-1.6.7", "xiaoye97-LDBTool-3.0.3", "CommonAPI-DSPModSave-1.2.2"]
