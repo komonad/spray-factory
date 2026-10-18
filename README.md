@@ -24,7 +24,6 @@
 - 已在游戏 0.10.35.29151、CommonAPI 1.6.7 环境下进行基础运行验证。
 - 已通过四级增产剂、堆叠增强与 OrbitalRing 1.0.20 的组合运行检查，支持 8 点增产效果与 8 层堆叠输出。
 - OrbitalRing 的原生工厂模块和轨道环全局生产加成暂未接入。
-- GenesisBook 尚未验证。
 
 ## 问题反馈
 
@@ -60,7 +59,6 @@ Turn the spray coater into a universal factory. Build production lines without s
 - Basic runtime checks cover game 0.10.35.29151 and CommonAPI 1.6.7.
 - Combined runtime checks pass with Proliferator Mk.IV, Stacking Enhancement and OrbitalRing 1.0.20, including 8-point proliferation and 8-layer output stacks.
 - OrbitalRing's native factory modules and orbital ring global production bonuses are not integrated.
-- GenesisBook compatibility has not been verified.
 
 ## Feedback
 
