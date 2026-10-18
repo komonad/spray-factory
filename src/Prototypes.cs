@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -22,12 +23,12 @@ namespace SprayFactory
 
         internal static void Register()
         {
-            var occupiedItems = new HashSet<int>(LDB.items.dataArray.Select(x => x.ID));
-            var occupiedRecipes = new HashSet<int>(LDB.recipes.dataArray.Select(x => x.ID));
+            var occupiedItems = new HashSet<int>(LDB.items.dataArray.Concat(Queued<ItemProto>()).Select(x => x.ID));
+            var occupiedRecipes = new HashSet<int>(LDB.recipes.dataArray.Concat(Queued<RecipeProto>()).Select(x => x.ID));
             while (occupiedItems.Contains(ItemId)) ItemId++;
             while (occupiedRecipes.Contains(RecipeId)) RecipeId++;
             if (ItemId >= 12000 || RecipeId >= 12000) throw new InvalidOperationException("No free Spray Factory prototype ID.");
-            var occupiedModels = new HashSet<int>(LDB.models.dataArray.Select(x => x.ID));
+            var occupiedModels = new HashSet<int>(LDB.models.dataArray.Concat(Queued<ModelProto>()).Select(x => x.ID));
             if (ModelId >= LDB.models.Length + 64 || occupiedModels.Contains(ModelId))
                 ModelId = Enumerable.Range(1, LDB.models.Length + 63).Last(id => !occupiedModels.Contains(id));
             var sourceItem = LDB.items.Select(2313);
@@ -56,10 +57,8 @@ namespace SprayFactory
             item.ID = ItemId; item.Name = "SprayFactory.Name"; item.Description = "SprayFactory.Description";
             item.SID = item.sid = ""; item.ModelIndex = ModelId; item.ModelCount = 1;
             item.IconPath = "";
-            var beltRecipe = LDB.recipes.dataArray.First(r => r.Results.Contains(2001));
-            var unlockTech = LDB.techs.dataArray.First(t => t.UnlockRecipes != null && t.UnlockRecipes.Contains(beltRecipe.ID));
-            item.Grade = 1; item.Upgrades = new int[0]; item.PreTechOverride = unlockTech.ID;
-            item.BuildIndex = FindBuildSlot(sourceItem.BuildIndex / 100);
+            item.Grade = 1; item.Upgrades = new int[0]; item.PreTechOverride = 0;
+            item.BuildIndex = 0;
             item.GridIndex = FindGridSlot(sourceItem.GridIndex / 1000);
             item.handcrafts = item.recipes = item.makes = null; item.rawMats = null;
             LDBTool.PreAddProto(item);
@@ -72,28 +71,27 @@ namespace SprayFactory
             };
             LDBTool.PreAddProto(recipe);
             RecipeId = recipe.ID;
-            unlockTech.UnlockRecipes = unlockTech.UnlockRecipes.Concat(new[] { RecipeId }).Distinct().ToArray();
             Plugin.Log.LogInfo("Registered Spray Factory: item=" + ItemId + " recipe=" + RecipeId + " model=" + ModelId + " build=" + item.BuildIndex + " grid=" + item.GridIndex);
-        }
-
-        private static int FindBuildSlot(int preferred)
-        {
-            var used = new HashSet<int>(LDB.items.dataArray.Where(x => x != null).Select(x => x.BuildIndex));
-            var buttons = UIRoot.instance?.uiGame?.buildMenu?.childButtons;
-            int lastPosition = buttons == null ? 10 : Math.Min(12, buttons.Length - 1);
-            foreach (int category in new[] { preferred, 4 }.Concat(Enumerable.Range(1, 9)).Distinct())
-                for (int position = 1; position <= lastPosition; position++)
-                    if ((buttons == null || buttons[position] != null) && !used.Contains(category * 100 + position))
-                        return category * 100 + position;
-            throw new InvalidOperationException("No free build menu slot.");
         }
         private static int FindGridSlot(int page)
         {
-            var used = new HashSet<int>(LDB.items.dataArray.Select(x => x.GridIndex).Concat(LDB.recipes.dataArray.Select(x => x.GridIndex)));
+            var used = new HashSet<int>(LDB.items.dataArray.Concat(Queued<ItemProto>()).Select(x => x.GridIndex)
+                .Concat(LDB.recipes.dataArray.Concat(Queued<RecipeProto>()).Select(x => x.GridIndex)));
             for (int row = 1; row <= 7; row++)
                 for (int column = 1; column <= 14; column++)
                     if (!used.Contains(page * 1000 + row * 100 + column)) return page * 1000 + row * 100 + column;
             throw new InvalidOperationException("No free recipe grid slot.");
+        }
+        private static IEnumerable<T> Queued<T>() where T:Proto
+        {
+            foreach(string name in new[]{"PreToAdd","PostToAdd"})
+            {
+                var groups=AccessTools.Field(typeof(LDBTool),name)?.GetValue(null) as IEnumerable;
+                if(groups==null) continue;
+                foreach(IEnumerable group in groups)
+                    foreach(object proto in group)
+                        if(proto is T typed) yield return typed;
+            }
         }
         private static Material[][] CloneMaterials(Material[][] source, Material[][] renderMaterials)
         {
@@ -120,6 +118,11 @@ namespace SprayFactory
             LDB.models.OnAfterDeserialize();
             ModelProto.InitMaxModelIndex(); ModelProto.InitModelIndices(); ModelProto.InitModelOrders();
             LDB.items.OnAfterDeserialize(); LDB.recipes.OnAfterDeserialize(); LDB.techs.OnAfterDeserialize();
+            var factoryItem = LDB.items.Select(ItemId);
+            var beltRecipe = LDB.recipes.dataArray.First(r => r.Results.Contains(2001));
+            var unlockTech = LDB.techs.dataArray.First(t => t.UnlockRecipes != null && t.UnlockRecipes.Contains(beltRecipe.ID));
+            factoryItem.PreTechOverride = unlockTech.ID;
+            unlockTech.UnlockRecipes = unlockTech.UnlockRecipes.Concat(new[] { RecipeId }).Distinct().ToArray();
             for (int i = 0; i < LDB.items.dataArray.Length; i++)
             {
                 var item = LDB.items.dataArray[i]; item.recipes = null; item.rawMats = null; item.Preload(i);
@@ -129,8 +132,7 @@ namespace SprayFactory
             foreach (var tech in LDB.techs.dataArray) { tech.Preload(); tech.Preload2(); }
             PlanetFactory.PrefabDescByModelIndex = null; PlanetFactory.InitPrefabDescArray();
             SpaceSector.PrefabDescByModelIndex = null; SpaceSector.InitPrefabDescArray();
-            var build = LDB.items.Select(ItemId).BuildIndex;
-            LDBTool.SetBuildBar(build / 100, build % 100, ItemId);
+            FactoryBuildMenu.Place(factoryItem,LDB.items.Select(2313));
             if (GameMain.instance != null)
                 foreach (string method in new[] { "CreateGPUInstancing", "CreateBPGPUInstancing", "CreateStarmapGPUInstancing" })
                     AccessTools.Method(typeof(GameMain), method)?.Invoke(GameMain.instance, null);

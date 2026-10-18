@@ -15,6 +15,8 @@ namespace SprayFactory
     [BepInDependency(CommonAPIPlugin.GUID, "1.6.7")]
     [BepInDependency("me.xiaoye97.plugin.Dyson.LDBTool", "3.0.3")]
     [BepInDependency(DSPModSavePlugin.MODGUID, "1.2.2")]
+    [BepInDependency("org.ProfessorCat305.OrbitalRing", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("Gnimaerd.DSP.plugin.BuildBarTool", BepInDependency.DependencyFlags.SoftDependency)]
     [CommonAPISubmoduleDependency(nameof(ProtoRegistry), nameof(LocalizationModule))]
     public sealed class Plugin : BaseUnityPlugin, IModCanSave
     {

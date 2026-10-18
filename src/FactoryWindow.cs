@@ -16,6 +16,15 @@ namespace SprayFactory
         private static Vector2 originalSize;
         private static StorageComponent serving;
         private static int servingRecipe;
+        private static Vector2 originalIncPosition,originalTipPosition,originalSpeedPosition,originalServingPosition;
+        private sealed class ProductSlot
+        {
+            internal RectTransform Root;
+            internal UIButton Button;
+            internal Image Icon,Progress,ExtraProgress;
+            internal Text Count;
+        }
+        private static readonly List<ProductSlot> extraProducts=new List<ProductSlot>();
         private static readonly StringBuilder powerServed=new StringBuilder("         W     %",20);
 
         internal static bool Matches(UISpraycoaterWindow window)
@@ -33,6 +42,11 @@ namespace SprayFactory
             view=UnityEngine.Object.Instantiate(UIRoot.instance.uiGame.assemblerWindow,owner.transform,false);
             view.name="spray-factory-panel";
             view.enabled=false;
+            view.produceGroup.Find("lithography")?.gameObject.SetActive(false);
+            originalIncPosition=view.incInfoGroup.anchoredPosition;
+            originalTipPosition=view.transferTipText.rectTransform.anchoredPosition;
+            originalSpeedPosition=view.speedGroup.anchoredPosition;
+            originalServingPosition=view.servingGroup.anchoredPosition;
             var rect=(RectTransform)view.transform;
             rect.anchorMin=rect.anchorMax=rect.pivot;
             rect.anchoredPosition=Vector2.zero;
@@ -91,6 +105,33 @@ namespace SprayFactory
         {
             button.onClick=new Button.ButtonClickedEvent(); button.onClick.AddListener(()=>action());
             var ui=button.GetComponent<UIButton>(); if(ui!=null) ui.tips=default(UIButton.TipSettings);
+        }
+        private static T CloneProductField<T>(RectTransform root,T original) where T:Component
+        {
+            var names=new List<string>();var current=original.transform;
+            while(current!=view.productGroup) {names.Add(current.name);current=current.parent;}
+            names.Reverse();return root.Find(string.Join("/",names)).GetComponent<T>();
+        }
+        private static void EnsureProductSlots(int count)
+        {
+            while(extraProducts.Count<Math.Max(0,count-2))
+            {
+                int index=extraProducts.Count+2;
+                var root=UnityEngine.Object.Instantiate(view.productGroup,view.productGroup.parent,false);
+                root.name="product-slot-"+index;root.sizeDelta=new Vector2(64,64);
+                root.anchoredPosition=view.productGroup.anchoredPosition+new Vector2(64*(index%3),-64*(index/3));
+                CloneProductField(root,view.productButton1).gameObject.SetActive(false);
+                CloneProductField(root,view.productCountText1).gameObject.SetActive(false);
+                CloneProductField(root,view.productProgress1).gameObject.SetActive(false);
+                CloneProductField(root,view.extraProductProgress1).gameObject.SetActive(false);
+                if(view.resetButton.transform.IsChildOf(view.productGroup))
+                    CloneProductField(root,view.resetButton).gameObject.SetActive(false);
+                var slot=new ProductSlot {Root=root,Button=CloneProductField(root,view.productButton0),
+                    Icon=CloneProductField(root,view.productIcon0),Count=CloneProductField(root,view.productCountText0),
+                    Progress=CloneProductField(root,view.productProgress0),ExtraProgress=CloneProductField(root,view.extraProductProgress0)};
+                Bind(slot.Button.button,()=>TakeOutput(index));extraProducts.Add(slot);
+            }
+            for(int i=0;i<extraProducts.Count;i++)extraProducts[i].Root.gameObject.SetActive(i+2<count);
         }
         private static void WithState(Action<FactoryState> action)
         {
@@ -159,6 +200,10 @@ namespace SprayFactory
             WithState(state=>{
                 var recipe=LDB.recipes.Select(state.RecipeId);
                 bool hasRecipe=recipe!=null, accelerate=hasRecipe && (!recipe.productive || state.ForceAccMode);
+                int extraHeight=hasRecipe?64*Math.Max((recipe.Items.Length-1)/3,(recipe.Results.Length-1)/3):0;
+                view.incInfoGroup.anchoredPosition=originalIncPosition-Vector2.up*extraHeight;
+                if(!view.transferTipText.transform.IsChildOf(view.incInfoGroup) && !view.transferTipText.transform.IsChildOf(view.playerInventoryGroup))
+                    view.transferTipText.rectTransform.anchoredPosition=originalTipPosition-Vector2.up*extraHeight;
                 view.recipeGroup.gameObject.SetActive(!hasRecipe); view.produceGroup.gameObject.SetActive(hasRecipe);
                 view.incInfoGroup.gameObject.SetActive(hasRecipe);
                 RefreshPower();
@@ -179,7 +224,7 @@ namespace SprayFactory
                         serving=new StorageComponent(recipe.Items.Length) {type=EStorageType.Filtered}; servingRecipe=state.RecipeId;
                         for(int i=0;i<recipe.Items.Length;i++) serving.SetFilterDirect(i,recipe.Items[i],FactoryState.InputLimit(recipe.ItemCounts[i]));
                         serving.onStorageChange+=ApplyInputs;
-                        view.servingBox.colCount=recipe.Items.Length; view.servingBox.lackParam=2;
+                        view.servingBox.colCount=Math.Min(3,recipe.Items.Length); view.servingBox.lackParam=2;
                         view.servingBox._Init(serving); view.servingBox._Open();
                     }
                 }
@@ -195,26 +240,28 @@ namespace SprayFactory
                     view.productProgress0.fillAmount=view.productProgress1.fillAmount=progress;
                     float extraProgress=Mathf.Clamp01((float)(state.ExtraProgress+(state.BatchAccMode?0:state.BatchBonus*progress)));
                     view.extraProductProgress0.fillAmount=view.extraProductProgress1.fillAmount=extraProgress;
-                    for(int i=0;i<2;i++)
+                    EnsureProductSlots(recipe.Results.Length);
+                    for(int i=0;i<Math.Max(2,recipe.Results.Length);i++)
                     {
                         bool visible=i<recipe.Results.Length;
-                        var button=i==0?view.productButton0:view.productButton1;
-                        var icon=i==0?view.productIcon0:view.productIcon1;
-                        var count=i==0?view.productCountText0:view.productCountText1;
-                        var ring=i==0?view.productProgress0:view.productProgress1;
-                        var extraRing=i==0?view.extraProductProgress0:view.extraProductProgress1;
+                        var button=i==0?view.productButton0:i==1?view.productButton1:extraProducts[i-2].Button;
+                        var icon=i==0?view.productIcon0:i==1?view.productIcon1:extraProducts[i-2].Icon;
+                        var count=i==0?view.productCountText0:i==1?view.productCountText1:extraProducts[i-2].Count;
+                        var ring=i==0?view.productProgress0:i==1?view.productProgress1:extraProducts[i-2].Progress;
+                        var extraRing=i==0?view.extraProductProgress0:i==1?view.extraProductProgress1:extraProducts[i-2].ExtraProgress;
                         button.gameObject.SetActive(visible); icon.gameObject.SetActive(visible); count.gameObject.SetActive(visible);
                         ring.gameObject.SetActive(visible); extraRing.gameObject.SetActive(visible);
+                        ring.fillAmount=progress;extraRing.fillAmount=extraProgress;
                         if(!visible) continue;
                         int item=recipe.Results[i]; var buffer=FactoryState.Buffer(state.Output,item);
                         icon.sprite=LDB.items.Select(item)?.iconSprite; count.text=buffer.Count.ToString();
                         button.button.interactable=buffer.Count>0; button.tips.itemId=item; button.tips.type=UIButton.ItemTipType.Item;
                         button.tips.corner=2; button.tips.delay=0.2f;
                     }
-                    int width=recipe.Results.Length==1?64:128;
-                    view.productGroup.sizeDelta=new Vector2(width,64);
-                    view.speedGroup.anchoredPosition=new Vector2(width+16,view.speedGroup.anchoredPosition.y);
-                    view.servingGroup.anchoredPosition=new Vector2(width+96,view.speedGroup.anchoredPosition.y);
+                    int width=Math.Min(3,recipe.Results.Length)*64;
+                    view.productGroup.sizeDelta=new Vector2(Math.Min(width,128),64);
+                    view.speedGroup.anchoredPosition=new Vector2(width+16,originalSpeedPosition.y-extraHeight*0.5f);
+                    view.servingGroup.anchoredPosition=new Vector2(width+96,originalServingPosition.y);
                     int activeArrow=(int)(progress*view.speedArrows.Length)%view.speedArrows.Length;
                     for(int i=0;i<view.speedArrows.Length;i++) view.speedArrows[i].color=state.Status=="生产中" && i==activeArrow?view.marqueeOnColor:view.marqueeOffColor;
                 }
@@ -225,9 +272,9 @@ namespace SprayFactory
                 }
                 if(!hasRecipe && view.playerInventory.inited) view.playerInventory._Free();
                 view.playerInventoryGroup.gameObject.SetActive(hasRecipe && player!=null);
-                view.playerInventoryGroup.anchoredPosition=new Vector2(0,-220);
+                view.playerInventoryGroup.anchoredPosition=new Vector2(0,-220-extraHeight);
                 float widthWindow=player!=null?80+player.GetPackageColumnCount()*50:((RectTransform)UIRoot.instance.uiGame.assemblerWindow.transform).sizeDelta.x;
-                var size=new Vector2(widthWindow,(view.playerInventory.active?view.playerInventory.rowCount*50+220:270)+(hasRecipe?40:0));
+                var size=new Vector2(widthWindow,(view.playerInventory.active?view.playerInventory.rowCount*50+220:270)+(hasRecipe?40:0)+extraHeight);
                 view.windowTrans.sizeDelta=size; ((RectTransform)owner.transform).sizeDelta=size;
             });
             if(GameMain.mainPlayer!=null)
@@ -243,6 +290,7 @@ namespace SprayFactory
             {
                 FreeServing(); view.servingBox._Destroy(); view.playerInventory._Destroy();
                 view.gameObject.SetActive(false); UnityEngine.Object.Destroy(view.gameObject); view=null;
+                extraProducts.Clear();
             }
             if(owner!=null) ((RectTransform)owner.transform).sizeDelta=originalSize;
             foreach(var entry in hidden) if(entry.Key!=null) entry.Key.SetActive(entry.Value);

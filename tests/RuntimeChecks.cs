@@ -834,6 +834,40 @@ public sealed class RuntimeChecks : BaseUnityPlugin
                 Check(state.Input[1102].Count==inputCapacity && package.grids[1].count==oreBefore-inputCapacity
                     && opened.Count(g=>g==view.servingBox)==1 && opened.Count(g=>g==view.playerInventory)==1,
                     "reopened factory transfers into its current ingredient cache once");
+                var originalRecipes=LDB.recipes.dataArray;
+                var six=(RecipeProto)AccessTools.Method(typeof(object),"MemberwiseClone").Invoke(LDB.recipes.Select(6),null);
+                six.ID=Enumerable.Range(11000,1000).First(id=>LDB.recipes.Select(id)==null);six.Name="RuntimeChecks.SixProducts";six.TimeSpend=120;
+                var materials=LDB.items.dataArray.Where(item=>item.ID>1000 && item.ID<10000 && !item.IsEntity && item.iconSprite!=null).Take(12).Select(item=>item.ID).ToArray();
+                six.Items=materials.Take(6).ToArray();six.ItemCounts=Enumerable.Repeat(1,6).ToArray();
+                six.Results=materials.Skip(6).Take(6).ToArray();six.ResultCounts=Enumerable.Range(1,6).ToArray();
+                try {
+                    LDB.recipes.dataArray=originalRecipes.Concat(new[]{six}).ToArray();LDB.recipes.OnAfterDeserialize();GameMain.history.recipeUnlocked.Add(six.ID);
+                    state.ChangeRecipe(six.ID);state.Input.Clear();state.Pending.Clear();state.Output.Clear();
+                    for(int i=0;i<6;i++) {
+                        package.grids[i]=new StorageComponent.GRID {itemId=six.Items[i],count=4,inc=32,stackSize=100};
+                        FactoryState.Buffer(state.Output,six.Results[i]).Add(six.ResultCounts[i],0);
+                    }
+                    AccessTools.Method(type,"Refresh").Invoke(null,new object[]{window});
+                    var slots=(System.Collections.IList)AccessTools.Field(type,"extraProducts").GetValue(null);
+                    Check(view.servingBox.colCount==3 && view.servingBox.rowCount==2 && slots.Count==4
+                        && view.windowTrans.sizeDelta==new Vector2(580,524),"six ingredients and six products fit two native rows above the backpack");
+                    for(int i=0;i<6;i++)gridClick.Invoke(view.playerInventory,new object[]{i,0,false,true,player});
+                    Check(six.Items.All(item=>state.Input[item].Count==2 && state.Input[item].Inc==16),"all six native ingredient slots retain Ctrl-click transfer and proliferation");
+                    bool collected=true;
+                    for(int i=0;i<6;i++) {
+                        var button=i==0?view.productButton0:i==1?view.productButton1:(UIButton)AccessTools.Field(slots[i-2].GetType(),"Button").GetValue(slots[i-2]);
+                        int before=package.GetItemCount(six.Results[i]);button.button.onClick.Invoke();
+                        collected &= state.Output[six.Results[i]].Count==0 && package.GetItemCount(six.Results[i])==before+six.ResultCounts[i];
+                    }
+                    Check(collected,"all six native product buttons retrieve their corresponding output");
+                    foreach(var extra in slots) {
+                        var root=(RectTransform)AccessTools.Field(extra.GetType(),"Root").GetValue(extra);
+                        Check(root.GetComponentsInChildren<UnityEngine.UI.Button>(true).Count(button=>button.gameObject.activeSelf)==1,"additional product slots contain one active product action");
+                    }
+                    CaptureWindow(window,"factory-six-products.png");
+                    state.ChangeRecipe(6);AccessTools.Method(type,"Refresh").Invoke(null,new object[]{window});
+                    Check(view.windowTrans.sizeDelta.y==460 && slots.Cast<object>().All(slot=>!((RectTransform)AccessTools.Field(slot.GetType(),"Root").GetValue(slot)).gameObject.activeSelf),"returning to two outputs hides extra rows and restores native window height");
+                } finally { LDB.recipes.dataArray=originalRecipes;LDB.recipes.OnAfterDeserialize(); }
             } finally {
                 AccessTools.Method(type,"Hide").Invoke(null,null);
                 Check(((RectTransform)window.transform).sizeDelta==originalWindowSize,"vanilla window size restores after factory closes");
