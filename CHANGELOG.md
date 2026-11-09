@@ -1,5 +1,9 @@
 # Changelog
 
+## 未发布
+
+- 喷涂工厂制造配方简化为 4 个铁块。
+
 ## 0.1.1
 
 - 传送带自动进料保持 2 轮配方用量，手动放入和 Ctrl 点击补料使用原版工厂的较大缓存容量。
@@ -15,6 +19,10 @@
 - 添加工厂窗口、配方选择、生产统计及配方颜色光效。
 
 ## English
+
+### Unreleased
+
+- Simplified the Spray Factory crafting recipe to 4 Iron Ingots.
 
 ### 0.1.1
 

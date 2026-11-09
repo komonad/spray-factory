@@ -65,8 +65,8 @@ public sealed class RuntimeChecks : BaseUnityPlugin
             Check(item.ModelIndex != original.ModelIndex && !ReferenceEquals(item.prefabDesc, original.prefabDesc), "independent model descriptor");
             Check(original.prefabDesc.isPowerConsumer && item.prefabDesc.isPowerConsumer && item.prefabDesc.workEnergyPerTick*60==300000
                 && item.prefabDesc.idleEnergyPerTick==167,"factory descriptor supplies 300 kW working power and approximately 10 kW idle power");
-            Check(recipe.Items.SequenceEqual(new[] {1101,1201,1301}) && recipe.ItemCounts.SequenceEqual(new[] {4,2,2})
-                && recipe.Handcraft && recipe.TimeSpend==180,"factory construction uses iron, gears and circuits in three seconds");
+            Check(recipe.Items.SequenceEqual(new[] {1101}) && recipe.ItemCounts.SequenceEqual(new[] {4})
+                && recipe.Handcraft && recipe.TimeSpend==180,"factory construction uses four iron ingots in three seconds");
             var beltRecipe=LDB.recipes.dataArray.First(r=>r.Results.Contains(2001));
             Check(recipe.preTech==beltRecipe.preTech && item.PreTechOverride==beltRecipe.preTech.ID
                 && beltRecipe.preTech.UnlockRecipes.Contains(recipe.ID),"factory unlock matches Conveyor Belt Mk.I technology");

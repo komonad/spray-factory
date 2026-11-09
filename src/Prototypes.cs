@@ -66,7 +66,7 @@ namespace SprayFactory
             var recipe = new RecipeProto {
                 ID = RecipeId, Name = "SprayFactory.Name", Description = "SprayFactory.Description", Type = ERecipeType.Assemble,
                 IconPath = "", GridIndex = item.GridIndex, TimeSpend = 180,
-                Items = new[] {1101,1201,1301}, ItemCounts = new[] {4,2,2}, Results = new[] {ItemId}, ResultCounts = new[] {1},
+                Items = new[] {1101}, ItemCounts = new[] {4}, Results = new[] {ItemId}, ResultCounts = new[] {1},
                 Handcraft = true, NonProductive = true
             };
             LDBTool.PreAddProto(recipe);
